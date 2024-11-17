@@ -15,39 +15,43 @@ class Crawler:
 		self.report = "NO DATA"
 
 	def add_children(self, links, parent_url):
-		for link in links:
-			self.tree.add_node(url=link, parent_url=parent_url)
-	
-	def search_stage1(self):
-		leaves = deque(node for node in self.tree.get_leaves())
+		self.tree.add_batch(links, parent_url)
+		self.tree.get_node(parent_url).searched = True
+
+	def prep_search(self):
+		next_floor = deque()
+		leaves = self.tree.get_leaves()
 		
 		if len(leaves) == 1:
 			floor = [next(iter(leaves)).url]
-			next_floor = deque()
 		else:
-			min_depth = min([self.tree.get_depth(leaf.url) for leaf in leaves])
-			floor = deque(node.url for node in leaves if self.tree.get_depth(node.url)==min_depth)
-			next_floor = deque(node.url for node in leaves if self.tree.get_depth(node.url)==min_depth+1)
+			leaves_by_depth = sorted(leaves, key=lambda leaf: leaf.depth)
+			floor = [leaf.url for leaf in leaves_by_depth if not leaf.searched]
+			
 		logger.info("Search stage 1 complete")
 		print("Search stage 1 complete")
 		return floor, next_floor
+
+	def search(self, depth, check_adds):
 		
-	def search(self, depth):
-		
-		floor, next_floor = self.search_stage1()
+		floor, next_floor = self.prep_search()
 			
 		for d in range(depth):
 			responses = request_batch(floor)
 			for index, child in responses:
-				child_url = floor[index]
-				try:
-					childs = fetch_links(child_url, child)
-					self.add_children(childs, child_url)
-					next_floor.extend(childs)
-				except Exception as e:
-					logger.error("Error: {e}")
 				
-				print(f"Completed: {child_url}\nLinks added: {len(childs)}")
+				child_url = floor[index]
+				childs = fetch_links(child_url, child)
+				
+				if check_adds: 
+					all_nodes1 = len(self.tree.all_nodes())
+					self.add_children(childs, child_url)
+					all_nodes2 = len(self.tree.all_nodes())
+					print(f"Completed: {child_url}\nLinks added: {all_nodes2-all_nodes1}")
+				else:
+					self.add_children(childs, child_url)
+					print(f"Completed: {child_url}")
+				next_floor.extend(childs)
 				
 			floor = next_floor
 			next_floor = deque()
@@ -60,20 +64,19 @@ class Crawler:
 		
 		print(self.report)
 
-	def save_tree(self, filename): 
-		for node in self.tree.all_nodes():
-			f = open(filename, "a")
-			f.write(node.url+"\n")
-			f.close()
+	def save_tree(self, filename):
+		open(filename,'w').close()
+		with open(filename, "a") as f:
+			f.writelines([node.url+"\n" for node in self.tree.all_nodes()])
 
-	def crawl(self, depth):
+	def crawl(self, depth, check_adds=True):
 		try:
-			self.search(depth)
+			self.search(depth, check_adds)
 			logger.info("Crawl complete")
 			print("Crawl complete")
 		except KeyboardInterrupt:
 			print("You ended the crawl.")
 			logger.info("You ended the crawl.\n")
-		except Exception as e:
-			logger.critical(f'Fatal error occured. Error: -->  {e}  <--')
-			print(f'Fatal error occured. Error: -->  {e}  <--')
+		#except Exception as e:
+			#logger.critical(f'Fatal error occured. Error: -->  {e}  <--')
+			#print(f'Fatal error occured. Error: -->  {e}  <--')

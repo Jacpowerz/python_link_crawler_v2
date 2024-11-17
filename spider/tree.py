@@ -24,10 +24,16 @@ class Tree:
 		session.close()
 		return node
 		
+	def get_node_by_id(self, id):
+		session = self.Session()
+		node = session.query(Node).filter_by(id=id).first()
+		session.close()
+		return node
+		
 	def add_root(self, url):
 		# Adds a root node directly to the database.
 		try:
-			node = Node(url=url, parent_url=None)
+			node = Node(url=url, parent_id=None)
 			session = self.Session()
 			session.add(node)
 			session.commit()
@@ -42,7 +48,7 @@ class Tree:
 		try:
 			parent = self.get_node(parent_url)
 			if parent:
-				node = Node(url=url, parent_url=parent_url)
+				node = Node(url=url, parent_id=parent.id, depth=self.get_depth(parent_url)+1)
 			else:
 				raise ValueError
 			session = self.Session()
@@ -56,6 +62,23 @@ class Tree:
 		finally:
 			session.close()
 
+	def add_batch(self, urls, parent_url):
+		nodes = []
+		for url in urls:
+			parent = self.get_node(parent_url)
+			nodes.append(Node(url=url, parent_id=parent.id, depth=self.get_depth(parent_url)+1))
+		try:
+			session = self.Session()
+			session.bulk_save_objects(nodes)
+			session.commit()
+		except IntegrityError:
+			session.rollback()
+		except ValueError:
+			session.rollback()
+			raise DatabaseError(f"Parent node: {parent_url} does not exist.")
+		finally:
+			session.close()
+				
 	def delete_node(self, url):
 		
 		try:
@@ -75,13 +98,14 @@ class Tree:
 			session.close()
 
 	def get_children(self, url):
-		children = self.Session().query(Node).filter_by(parent_url=url)
+		node_id = self.get_node(url).id
+		children = self.Session().query(Node).filter_by(parent_id=node_id)
 		return children
 		
 	def get_parent(self, url):
 		node = self.get_node(url)
-		parent_url = node.parent_url
-		parent = self.get_node(parent_url)
+		parent_id = node.parent_id
+		parent = self.get_node_by_id(parent_id)
 		return parent
 		
 	def clear_data(self):
@@ -113,16 +137,15 @@ class Tree:
 		
 	def get_leaves(self):
 		session = self.Session()
-		# Query to find all nodes where the url is not referenced in any parent_url
+		# Query to find all nodes where the id is not referenced in as a parent_id anywhere
 		leaves = session.query(Node).filter(
-			~Node.url.in_(session.query(Node.parent_url).filter(Node.parent_url.isnot(None)))
+			~Node.id.in_(session.query(Node.parent_id).filter(Node.parent_id.isnot(None)))
 		).all()
 		session.close()
 		return leaves
 		
 	def max_depth(self):
-		answer = [self.get_depth(node.url) for node in self.get_leaves()]
-		return max(answer)
+		return max([node.depth for node in self.all_nodes()])
 		
 	def size(self):
 		session = self.Session()
