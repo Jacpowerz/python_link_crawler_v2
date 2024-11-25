@@ -22,21 +22,22 @@ def exception_handler(request, exception):
 	logger.error(f'grequests error occured. Error: -->  {exception}  <--')
 	
 def fetch_links(url, response):
-
-	soup = BeautifulSoup(response.text, 'html.parser')
-	a_tags = soup.find_all('a')
-	links = set()
-		
-	for tag in a_tags:
-		link = tag.get('href')
-		if link:
-			if link[-1] == "/": link = link[:-1]
-			if https_regex.match(link):
-				links.add(link)
-			elif relative_regex.match(link):
-				links.add(url + link)
-
-	return links
+	try:
+		soup = BeautifulSoup(response.text, 'html.parser')
+		a_tags = soup.find_all('a')
+		links = set()
+			
+		for tag in a_tags:
+			link = tag.get('href')
+			if link:
+				if link[-1] == "/": link = link[:-1]
+				if https_regex.match(link):
+					links.add(link)
+				elif relative_regex.match(link):
+					links.add(url + link)
+		return links
+	except AttributeError as e:
+		logger.error(e)
 
 def request_batch(batch):
 	pending = (grequests.get(u) for u in batch)

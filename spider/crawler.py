@@ -44,6 +44,11 @@ class Crawler:
 				
 				child_url = floor[index]
 				childs = fetch_links(child_url, child)
+				
+				# Stop it from passing NoneType list
+				if childs is None:
+					childs = []
+					
 				if check_adds: 
 					all_nodes1 = len(self.tree.all_nodes())
 					self.add_children(childs, child_url)
@@ -53,7 +58,7 @@ class Crawler:
 				else:
 					self.add_children(childs, child_url)
 					self.tree.set_searched(child_url, True)
-					print(f"Completed: {child_url}")
+					logger.info(f"Completed: {child_url}")
 				next_floor.extend(childs)
 				
 			floor = next_floor
@@ -62,13 +67,13 @@ class Crawler:
 	def generate_report(self):
 		
 		self.report = ""
-		self.report += f"Links found: {len(self.tree.all_nodes())-1}\n"
+		self.report += f"Total Links: {len(self.tree.all_nodes())}\n"
 		self.report += f"Max Depth: {self.tree.max_depth()}"
 		
 		print(self.report)
 
 	def save_tree(self, filename):
-		open(filename,'w').close()
+		open(filename,'w').close() # Clears list before writing new lines 
 		with open(filename, "a") as f:
 			f.writelines([node.url+"\n" for node in self.tree.all_nodes()])
 
@@ -80,6 +85,3 @@ class Crawler:
 		except KeyboardInterrupt:
 			print("You ended the crawl.")
 			logger.info("You ended the crawl.\n")
-		#except Exception as e:
-			#logger.critical(f'Fatal error occured. Error: -->  {e}  <--')
-			#print(f'Fatal error occured. Error: -->  {e}  <--')

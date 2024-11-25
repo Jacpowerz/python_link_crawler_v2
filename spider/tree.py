@@ -67,24 +67,26 @@ class Tree:
 
 	def add_batch(self, urls, parent_url):
 		nodes = []
-		all_urls = [node.url for node in self.all_nodes()]
+		all_urls = set(node.url for node in self.all_nodes())
+		urls = set(urls) - all_urls
 		for url in urls:
 			parent = self.get_node(parent_url)
-			if url not in all_urls:
-				nodes.append(Node(url=url, parent_id=parent.id, depth=self.get_depth(parent_url)+1))
-		try:
-			session = self.Session()
-			session.bulk_save_objects(nodes)
-			session.commit()
-		except IntegrityError:
-			session.rollback()
-			logger.error(f"One (or more) of the urls already exists in the database.")
-		except ValueError:
-			session.rollback()
-			logger.error(f"Parent node: {parent_url} does not exist.")
-			raise DatabaseError(f"Parent node: {parent_url} does not exist.")
-		finally:
-			session.close()
+			nodes.append(Node(url=url, parent_id=parent.id, depth=self.get_depth(parent_url)+1))
+		# Check if nodes is empty so I don't waste func calls 
+		if len(nodes) > 0:
+			try:
+				session = self.Session()
+				session.bulk_save_objects(nodes)
+				session.commit()
+			except IntegrityError:
+				session.rollback()
+				logger.error(f"One (or more) of the urls already exists in the database.")
+			except ValueError:
+				session.rollback()
+				logger.error(f"Parent node: {parent_url} does not exist.")
+				raise DatabaseError(f"Parent node: {parent_url} does not exist.")
+			finally:
+				session.close()
 				
 	def delete_node(self, url):
 		
@@ -152,7 +154,7 @@ class Tree:
 		return leaves
 		
 	def max_depth(self):
-		return max([node.depth for node in self.all_nodes()])
+		return max(set(node.depth for node in self.all_nodes()))
 		
 	def size(self):
 		session = self.Session()
