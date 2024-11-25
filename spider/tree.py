@@ -1,9 +1,11 @@
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.sql import not_
+from sqlalchemy import update
 from .database import get_engine, init_db
 from .node import Node
 from .exceptions import DatabaseError
+from .request_utils import logger
 
 class Tree:
 	def __init__(self, db_path):
@@ -39,7 +41,7 @@ class Tree:
 			session.commit()
 		except IntegrityError:
 			session.rollback()
-			print(f"Node for {url} already exists in the database.")
+			logger.info(f"Node for {url} already exists in the database.")
 		finally:
 			session.close()
 		
@@ -56,6 +58,7 @@ class Tree:
 			session.commit()
 		except IntegrityError:
 			session.rollback()
+			logger.info(f"Node for {url} already exists in the database.")
 		except ValueError:
 			session.rollback()
 			raise DatabaseError(f"Parent node: {parent_url} does not exist.")
@@ -64,17 +67,21 @@ class Tree:
 
 	def add_batch(self, urls, parent_url):
 		nodes = []
+		all_urls = [node.url for node in self.all_nodes()]
 		for url in urls:
 			parent = self.get_node(parent_url)
-			nodes.append(Node(url=url, parent_id=parent.id, depth=self.get_depth(parent_url)+1))
+			if url not in all_urls:
+				nodes.append(Node(url=url, parent_id=parent.id, depth=self.get_depth(parent_url)+1))
 		try:
 			session = self.Session()
 			session.bulk_save_objects(nodes)
 			session.commit()
 		except IntegrityError:
 			session.rollback()
+			logger.error(f"One (or more) of the urls already exists in the database.")
 		except ValueError:
 			session.rollback()
+			logger.error(f"Parent node: {parent_url} does not exist.")
 			raise DatabaseError(f"Parent node: {parent_url} does not exist.")
 		finally:
 			session.close()
@@ -156,5 +163,23 @@ class Tree:
 	def all_nodes(self):
 		session = self.Session()
 		nodes = session.query(Node).all()
+		session.close()
+		return nodes
+
+	def set_searched(self, url, val):
+		session = self.Session()
+		session.query(Node).filter(Node.url == url).update(
+                {Node.searched: val}, synchronize_session='fetch'
+            )
+		session.commit()
+		session.close()
+		
+	def get_searched_val(self, url):
+		node = self.get_node(url)
+		return node.searched
+		
+	def get_not_searched(self):
+		session = self.Session()
+		nodes = session.query(Node).filter(Node.searched == False).all()
 		session.close()
 		return nodes

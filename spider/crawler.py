@@ -16,17 +16,19 @@ class Crawler:
 
 	def add_children(self, links, parent_url):
 		self.tree.add_batch(links, parent_url)
-		self.tree.get_node(parent_url).searched = True
 
 	def prep_search(self):
 		next_floor = deque()
-		leaves = self.tree.get_leaves()
+		leaves = self.tree.get_not_searched()
 		
 		if len(leaves) == 1:
 			floor = [next(iter(leaves)).url]
 		else:
 			leaves_by_depth = sorted(leaves, key=lambda leaf: leaf.depth)
-			floor = [leaf.url for leaf in leaves_by_depth if not leaf.searched]
+			floor = deque()
+			for leaf in leaves_by_depth:
+				if leaf.searched == False:
+					floor.append(leaf.url)
 			
 		logger.info("Search stage 1 complete")
 		print("Search stage 1 complete")
@@ -42,14 +44,15 @@ class Crawler:
 				
 				child_url = floor[index]
 				childs = fetch_links(child_url, child)
-				
 				if check_adds: 
 					all_nodes1 = len(self.tree.all_nodes())
 					self.add_children(childs, child_url)
+					self.tree.set_searched(child_url, True)
 					all_nodes2 = len(self.tree.all_nodes())
 					print(f"Completed: {child_url}\nLinks added: {all_nodes2-all_nodes1}")
 				else:
 					self.add_children(childs, child_url)
+					self.tree.set_searched(child_url, True)
 					print(f"Completed: {child_url}")
 				next_floor.extend(childs)
 				
